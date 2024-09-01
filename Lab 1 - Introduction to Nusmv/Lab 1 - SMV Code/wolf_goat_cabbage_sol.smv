@@ -1,0 +1,81 @@
+-- 1st version
+-- MODULE main
+--   VAR
+--     farmer  : {left, right};
+--     goat    : {left, right};
+--     wolf    : {left, right};
+--     cabbage : {left, right};
+--   IVAR 
+--     move : {g, w, c, n};
+--   ASSIGN
+--   init(farmer) := left;
+--   init(goat) := left;
+--   init(wolf) := left;
+--   init(cabbage) := left;
+
+--   next(farmer) := case
+--     farmer = right : left;
+--     farmer = left  : right;
+--   esac;
+  
+--   next(wolf) := case
+--     -- the wolf will be on the same, next side of the farmer
+--     move = w & wolf = farmer : next(farmer);
+--     TRUE                     : wolf;
+--   esac;
+
+--   next(goat) := case
+--     -- the wolf will be on the same, next side of the farmer
+--     move = g & goat = farmer : next(farmer);
+--     TRUE                     : goat;
+--   esac;
+
+--   next(cabbage) := case
+--     -- the wolf will be on the same, next side of the farmer
+--     move = c & cabbage = farmer : next(farmer);
+--     TRUE                     : cabbage;
+--   esac;
+
+-- INVARSPEC !(wolf = right & goat = right & cabbage = right);
+
+-- 2nd version with 'eaten' value for the goat and the cabbage
+MODULE main
+  VAR
+    farmer  : {left, right};
+    goat    : {left, right, eaten};
+    wolf    : {left, right};
+    cabbage : {left, right, eaten};
+  IVAR 
+    move : {g, w, c, n};
+  ASSIGN
+  init(farmer) := left;
+  init(goat) := left;
+  init(wolf) := left;
+  init(cabbage) := left;
+
+  next(farmer) := case
+    farmer = right : left;
+    farmer = left  : right;
+  esac;
+  
+  next(wolf) := case
+    -- the wolf will be on the same, next side of the farmer
+    move = w & wolf = farmer : next(farmer);
+    TRUE                     : wolf;
+  esac;
+
+  next(goat) := case
+    goat = wolf & goat != farmer : eaten;
+    -- the goat will be on the same, next side of the farmer
+    move = g & goat = farmer     : next(farmer);
+    TRUE                         : goat;
+  esac;
+
+  next(cabbage) := case
+    cabbage = goat & cabbage != farmer : eaten;
+    -- the wolf will be on the same, next side of the farmer
+    move = c & cabbage = farmer        : next(farmer);
+    TRUE                               : cabbage;
+  esac;
+
+INVARSPEC !(wolf = right & goat = right & cabbage = right);

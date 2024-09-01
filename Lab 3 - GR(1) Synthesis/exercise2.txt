@@ -1,0 +1,38 @@
+# This is file extends the coffee machine example
+# The new specification adds the safety guarantee
+#       G((gr & X bu) -> X gr)
+# to model the option to make "caffe' doppio" by keeping the button pushed
+# to grind more coffee 
+# 
+# 1. Test it on https://webslugs.ruediger-ehlers.de
+# 2. Does the controller works as expected? Check if it can actually make "caffe' doppio"
+# 3. Fix the specification to synthesize a controller that behaves as you expect
+#
+
+[INPUT]
+bu
+
+[OUTPUT]
+br
+gr
+
+[ENV_INIT]
+
+[SYS_INIT]
+gr <-> bu
+! br
+
+[SYS_TRANS]
+br' <-> gr
+gr' -> bu'
+## New safety guarantee to make "caffe' doppio"
+(gr & bu') -> gr'
+
+[ENV_TRANS]
+bu' -> !gr & !br
+
+[SYS_LIVENESS]
+br
+
+[ENV_LIVENESS]
+bu

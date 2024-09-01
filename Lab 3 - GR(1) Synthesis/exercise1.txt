@@ -1,0 +1,25 @@
+# This is the first specification of the coffee machine example.
+# Test it on https://webslugs.ruediger-ehlers.de
+# Check that everything works as expected: does the machine actually make coffe?
+
+[INPUT]
+bu
+
+[OUTPUT]
+br
+gr
+
+[ENV_INIT]
+# this is a comment
+
+[SYS_INIT]
+gr <-> bu
+! br
+
+[SYS_TRANS]
+br' <-> gr
+gr' -> bu'
+
+[ENV_TRANS]
+bu' -> !gr & !br
+

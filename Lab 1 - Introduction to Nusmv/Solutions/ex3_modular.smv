@@ -1,0 +1,50 @@
+-- This module represents the farmer/animals/vegetables.
+-- At each update, the controller will decide if it can move.
+-- side represent the side of the river where the entity is.
+MODULE entity(move)
+    VAR
+        side : {left, right};
+    ASSIGN
+        init(side) := left;
+        next(side) := case
+            move & side = left  : right;
+            move & side = right : left;
+            TRUE                : side;
+        esac;
+
+-- The goat never stays alone with the cabbage, and the wolf never stays alone with the goat.
+-- At each round, priority is chosen randomly. If it is not none (nobody moves), then the farmer will 
+-- move. He brings the animals/vegetables only if the other products are safe. 
+MODULE controller(farmer, wolf, goat, cabbage)
+    VAR
+        priority : {w, g, c, none};
+    DEFINE
+        move_w := case
+            priority = w & farmer = wolf & (goat != cabbage): TRUE;
+            TRUE : FALSE;
+        esac;
+        move_g := case
+            priority = g & farmer = goat: TRUE;
+            TRUE : FALSE;
+        esac;
+        move_c := case
+            priority = c & farmer = cabbage & (wolf != goat): TRUE;
+            TRUE : FALSE;
+        esac;
+
+
+
+MODULE main
+    VAR
+        farmer : entity(TRUE);
+        wolf : entity(contr.move_w);
+        goat : entity(contr.move_g);
+        cabbage : entity(contr.move_c);
+        contr : controller(farmer.side, wolf.side, goat.side, cabbage.side);
+
+
+
+-- A conterexample to "It cannot happen that everyone is on the right side of the river" 
+-- is the solution to the problem
+-- (which contains all the "moves" required for everyone to cross the bridge).
+INVARSPEC !(farmer.side = right & wolf.side = right & goat.side = right & cabbage.side = right)

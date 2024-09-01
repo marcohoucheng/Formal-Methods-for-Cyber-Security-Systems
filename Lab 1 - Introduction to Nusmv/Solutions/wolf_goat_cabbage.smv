@@ -1,0 +1,56 @@
+MODULE main
+    VAR
+        -- The wolf and the farmer can be on either side of the river
+        farmer  : {left, right};
+        wolf    : {left, right};
+        -- goat and cabbage can also be "eaten" when they are on the same side
+        -- of the predator with no farmer
+        goat    : {left, right, eaten};
+        cabbage : {left, right, eaten};
+        -- auxiliary variable to choose the item to put on the boat
+        -- nondeterministically chosen at each round
+        -- "e" stands for empty (i.e., the farmer alone)
+        boat    : {w, g, c, e};
+    ASSIGN 
+        -- initially all protagonists are on the left bank
+        init(goat) := left;
+        init(cabbage) := left;
+        init(wolf) := left;
+        init(farmer) := left;
+        -- The farmer go back and forth between the two sides of the river
+        next(farmer) := case
+            farmer = left    : right;
+            farmer = right   : left;
+        esac;
+        -- The wolf moves only when it is on the boat
+        next(wolf) := case
+            wolf = left  & boat = w & wolf = farmer : right;
+            wolf = right & boat = w & wolf = farmer : left;
+            TRUE                                    : wolf;
+        esac;
+        -- The goat moves only when it is on the boat 
+        -- it became "eaten" if it is alone with the wolf
+        next(goat) := case
+            -- goat = wolf  & goat != farmer           : eaten;
+            goat = left  & boat = g & goat = farmer : right;
+            goat = right & boat = g & goat = farmer : left;
+            TRUE                                    : goat;
+        esac;
+        -- The cabbage moves only when it is on the boat 
+        -- it became "eaten" if it is alone with the goat
+        next(cabbage) := case
+            -- cabbage = goat & cabbage != farmer              : eaten;
+            cabbage = left  & boat = c & cabbage = farmer   : right;
+            cabbage = right & boat = c & cabbage = farmer   : left;
+            TRUE                                            : cabbage;
+        esac;
+        -- Nondeterministically choose the item to load on the boat
+        boat := e union 
+                (farmer = wolf ? w : e ) union
+                (farmer = goat ? g : e ) union
+                (farmer = cabbage ? c : e);
+                
+-- Invariant: all items are on the right side
+-- When violated, the counterexample is a solution of the problem  
+INVARSPEC !(wolf = right & cabbage = right & goat = right)
+            

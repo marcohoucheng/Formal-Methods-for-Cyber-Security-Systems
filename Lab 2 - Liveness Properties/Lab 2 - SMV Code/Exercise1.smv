@@ -1,0 +1,40 @@
+--=========================================================================
+-- Exercise 1
+--=========================================================================
+
+MODULE main
+	VAR
+		state	: {ab, nanb, nab, anb};
+	ASSIGN
+	    init(state) := anb;
+	    next(state) := case
+	    	state = ab 					: anb;
+	    	state = anb					: {ab, nab, nanb};
+	    	state = nab 				: nab;
+	    	state = nanb				: nab;
+	    esac;
+	DEFINE
+		a := case
+			state = ab	: 1;
+			state = anb	: 1;
+			TRUE        : 0;
+	    esac;
+	    b := case
+	    	state = ab	: 1;
+			state = nab	: 1;
+			TRUE		: 0;
+	    esac;
+
+LTLSPEC F (b = 1)					-- TRUE
+LTLSPEC G (a = 1)					-- FALSE
+LTLSPEC (a = 1) U (b = 1)  			-- FALSE
+LTLSPEC (a = 1) U (X (b = 1))		-- TRUE
+LTLSPEC G F (b = 1)					-- TRUE
+LTLSPEC F G (b = 1)					-- FALSE
+
+LTLSPEC ! (F (b = 1))				-- FALSE
+LTLSPEC ! (G (a = 1))				-- FALSE
+LTLSPEC ! ((a = 1) U (b = 1))		-- FALSE
+LTLSPEC ! ((a = 1) U (X (b = 1)))	-- FALSE
+LTLSPEC ! (G F (b = 1))				-- FALSE
+LTLSPEC ! (F G (b = 1))				-- FALSE
