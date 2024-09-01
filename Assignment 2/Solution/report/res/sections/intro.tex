@@ -1,0 +1,53 @@
+% \section{Some notes on Assignment 1}
+% \textbf{TODO}: delete this section before submit. Some notes I took when Prof. Bresolin introduced us the assignment.
+
+% \begin{itemize}
+%   \item \textbf{Idea of this assignment:} to try to implement symbolic algorithms for invariant verification (the one that uses BDDs to do symbolic reachability)
+%   \item \textbf{\texttt{inv\_mc.py}:} we have to modify it to implement the algorithm
+%   \item \textbf{\texttt{inv\_mc.py}} contains two functions:
+%   \begin{itemize}
+%     \item\textbf{\texttt{spec\_to\_bdd(model, spec)}:} transforms a specification (the property we want to verify) into a BDD, because symbolic algorithms need BDDs
+%     \item \textbf{\texttt{check\_explain\_inv\_spec(spec)}:} checks the loaded \texttt{smv} model satisfies or not the invariant. The result is a tuple where the 1st element is boolean (\texttt{true} if the invariant is respected, \texttt{false} otherwise)
+%   \end{itemize}
+%   \item \textbf{TODO:} reimplement \texttt{check\_explain\_inv\_spec(spec)} from scratch by using BDDs in such a way that the behaviour is identical
+%   \item \textbf{usage:} \texttt{python3 inv\_mc.py switch.smv}
+%   \item We can use the following \texttt{pynusmv} modules:
+%   \begin{itemize}
+%     \item\textbf{\texttt{init}:} initialisation of the library
+%     \item\textbf{\texttt{glob}:} load model and obtain its symbolic representation 
+%     \item\textbf{\texttt{prop}:} used to get the properties (formulas that we have to specify)
+%     \item\textbf{\texttt{dd}:} functions for BDDs: we can directly use the BDD implementation of this library
+%     \item\textbf{\texttt{fsm}:} symbolic representation of the system, except for the function \texttt{reachable\_states}
+%   \end{itemize}
+%   \item The \textbf{short report} explain how we managed to solve the problems and how we chose the implementations. And in particular, explain how we generate a counterexample justifying why it is correct to generate it in the way we are doing it.
+% \end{itemize}
+
+\section{Introduction}
+
+The goal of this project is to implement a symbolic algorithm for the verification of a special class of LTL formulas, using BDDs as data structure to represent and manipulate regions. The class of formulas considered by the algorithm is called "reactivity" properties and have the special form
+
+\[ \Box\Diamond f \rightarrow \Box\Diamond g\]
+
+where $f$ and $g$ are Boolean combination of base formulas with no temporal operators.
+
+\medskip
+
+To do this, we will use the $\verb|PyNuSMV|$ Python library, which is a Python wrapper to $\verb|NuSMV|$ symbolic model checking algorithms. We will reimplement the given function $\verb|check_react_spec|(spec)$, respecting the following specifications:
+
+\begin{enumerate}
+	\item The function checks if the reactivity formula spec is satisfied by the loaded SMV model or not, that is, whether all the executions of the model satisfy spec or not.
+	\item The return value of $\verb|check_react_spec|(spec)$ is a tuple where the first element is $\verb|True|$ and the second element is $\verb|None|$ if the formula is true. When the formula is not verified, the first element is $\verb|False|$ and the second element is an execution of the SMV model that violates spec. The function returns $\verb|None|$ if spec is not a reactivity formula.
+	\item The execution is a tuple of alternating states and inputs, starting and ending with a state. States and inputs are represented by dictionaries where keys are state and inputs variable of the loaded SMV model, and values are their value.
+	\item The execution is looping: the last state should be somewhere else in the sequence to indicate the starting point of the loop. 
+\end{enumerate}
+
+\medskip
+
+In this report, we will discuss the methodology used in our implementation to replicate the function $\verb|check_react_spec|(spec)$. The correctness of our implementations will also be validated in the discussion section in this report.
+
+% OLD INTRO FROM ASSINGMENT 1
+% The goal of this project is to replicate the $\verb|check_explain_ltl_spec|$ function in the $\verb|mc|$ module of $\verb|PyNuSMV|$. $\verb|PyNuSMV|$ is a Python library, wrapper of $\verb|NuSMV|$, which among other things also includes symbolic model checking algorithms. The $\verb|check_explain_ltl_spec|$ function takes a LTL given specification as an input, and then checks it against the SMV model loaded within the working environment. In our case, the specification is expected to be of type invariant. The function returns a tuple, with its first element returning a boolean, it is $\verb|TRUE|$ if all reachable states of the SMV model satisfies the specification, and $\verb|FALSE|$ otherwise. If the first element of the tuple is $\verb|TRUE|$, then the second element of the tuple will be set to $\verb|None|$. Otherwise, the function returns a counterexample of a path showing the SMV model violating the specification, starting from the initial states. Note that there can be more than 1 counterexample if the SMV model violates the specification. This explanation is a tuple of alternating states and inputs, starting and ending with a state.
+
+% \medskip
+
+% In this report, we will discuss the methodology used in our implementation to replicate the function $\verb|check_explain_ltl_spec|$. The correctness of our implementations will also be validated in the discussion section in this report.

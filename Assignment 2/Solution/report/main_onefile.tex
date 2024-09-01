@@ -1,0 +1,189 @@
+\documentclass{article}
+\usepackage{algpseudocode}
+\usepackage{url}
+\usepackage{wasysym}
+
+%\usepackage[utf8]{inputenc}
+
+\title{Formal Methods for Cyber-Physcial Systems - Verification of Reactivity Properties Assignment}
+\author{Federico Brian, Hou Cheng Lam, Kourosh Marjouei}
+\date{Januray 2023}
+\begin{document}
+\maketitle
+\tableofcontents
+
+\newpage
+
+\section{Introduction}
+
+The goal of this project is to implement a symbolic algorithm for the verification of a special class of LTL formulas, using BDDs as data structure to represent and manipulate regions. The class of formulas considered by the algorithm is called "reactivity" properties and have the special form
+
+\[ \Box\Diamond f \rightarrow \Box\Diamond g\]
+
+where $f$ and $g$ are Boolean combination of base formulas with no temporal operators.
+
+\medskip
+
+To do this, we will use the $\verb|PyNuSMV|$ Python library, which is a Python wrapper to $\verb|NuSMV|$ symbolic model checking algorithms. We will reimplement the given function $\verb|check_react_spec|(spec)$, respecting the following specifications:
+
+\begin{enumerate}
+	\item The function checks if the reactivity formula spec is satisfied by the loaded SMV model or not, that is, whether all the executions of the model satisfy spec or not.
+	\item The return value of $\verb|check_react_spec|(spec)$ is a tuple where the first element is $\verb|True|$ and the second element is $\verb|None|$ if the formula is true. When the formula is not verified, the first element is $\verb|False|$ and the second element is an execution of the SMV model that violates spec. The function returns $\verb|None|$ if spec is not a reactivity formula.
+	\item The execution is a tuple of alternating states and inputs, starting and ending with a state. States and inputs are represented by dictionaries where keys are state and inputs variable of the loaded SMV model, and values are their value.
+	\item The execution is looping: the last state should be somewhere else in the sequence to indicate the starting point of the loop. 
+\end{enumerate}
+
+\medskip
+
+In this report, we will discuss the methodology used in our implementation to replicate the function $\verb|check_react_spec|(spec)$. The correctness of our implementations will also be validated in the discussion section in this report.
+
+\section{Methodology}
+
+\subsection{Model Preparation}
+
+To work with any SMV Models, the loaded .smv file needs to be converted into type BddFsm, which is a Python class for FSM structure, encoded into BDDs. As the SMV model is loaded into the global environment, this can be done by calling $\verb|pynusmv.glob.prop_database().master.bddFsm|$. The $\verb|prop|$ library provides a method $\verb|prop.expr|$ to extract the each specification to check included in the .smv file. As $\verb|prop.expr|$ extracts specifications that are not limited for reactivity checking, there is already a constraint in place in the Python script to skip these specifications. This is done by first checking whether the spec is of type LTL, then the LTL spec is split into 2 parts: the left and the right. The algorithm then confirms that each of these formulas are of type 'GF', which is a LTL specification representing 'always eventually', or equivalently, 'repeatedly'. Finally, the two specifications are checked to be boolean formulas before the program proceeds with the rest of $\verb|check_react_spec|(spec)$, which is described below.
+
+\medskip
+
+As the $\verb|check_react_spec|(spec)$ function does not pass the global FSM environment, we need to first retrieve and store it. The left side and right side of the specification to check for reactivity is then seperated into 2 specifications by $\verb|parse_react|(spec)$, namely $f$ and $g$.
+
+\subsection{Reachable States}
+
+Before checking whether a specification satifies the reactivity requirement, we need to create a BDD which contains all reachable states in a FSM structure. Reachable states are states can be visited under a SMV model. Trivially, initial states are reachable states. By using the initial states specified in the SMV models, the $\verb|Post()|$ function can be used to discover the states within the Post Image of the existing BDD structure, namely all states which can be reached from the initial states according to the SMV model, any states from this Post Image which are not members of the initial states are added to the set of reachable states. The remaining reachable states can then be found by recursively applying the $\verb|Post()|$ function to the current set of reachable states within the BDD structure. Simialrly as above, any newly discovered states are then added to this set/image of reachable states until no new states are found. The final image is the full set of reachable states within a SMV model.
+
+\begin{algorithmic}[1]
+\Function{REACH}{$bddfsm, init$}
+    \State $reach\leftarrow init$
+    \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \While{$new\not=$ INTERSECTION$(reach, new)$}
+        \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+        \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \EndWhile
+    \State \textbf{return }$reach$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states.
+\State $reach\leftarrow$ REACH$(bddfsm, init)$
+\State POST := $reach$ contains the BDD of all reachable states of the SMV Model.
+\end{algorithmic}
+
+\subsection{Reactivity Check}
+
+Recall that the reactivity specification of interest in this report has the special form
+
+\[ \Box\Diamond f \rightarrow \Box\Diamond g\]
+
+where f and g are Boolean combination of base formulas with no temporal operators. In another word, in a SMV model, whenever a state satisfying $f$ is visited, another state satisfying $g$ will also be visited eventually (with certainty), and this can happen repeatedly. Equivalently, to check if a specification respects the reactivity property, one can check when a state satisfying $f$ is visited, and whether there is a path or a possibility that another state satisfying $g$ is be visited, before visiting a state satisfying $f$ again, thus creating a loop avoiding $g$. We will consider and implement the latter approach, i.e. the SMV model respects the reactivity specification if there is not an infinite trace (i.e. a cycle) that satisfies the following
+
+\[ \Box\Diamond f \rightarrow \Box\Diamond \neg g\]
+
+In the $\verb|PyNuSMV|$ library, the function $\verb|prop.not_|(spec)$ converts a specification to its negative counterpart, i.e. where the specification is false. We can use this along with the $\verb|spec_to_bdd|$ function to build 2 BDD objects, with one containing states that satisfise $f$, the other containing states that satisfies $\neg g$ in the SMV model.
+
+\begin{algorithmic}[1]
+\State $ng \leftarrow$ prop.not\_$(g)$
+\State $bddspec\_f \leftarrow$ SPEC\_TO\_BDD$(bddfsm, f)$
+\State $bddspec\_ng \leftarrow$ SPEC\_TO\_BDD$(bddfsm, ng)$
+\end{algorithmic}
+
+With the BDDs in place, we can start the algorithm with the new BDD $(recur)$ with states that are reachable and satisfying both $f$ and $\neg g$. The repeatability algorithm works as follows:
+
+$\bf{INSERT CODE HERE}$
+
+\subsection{Reactivity Specifications}
+
+If our repeatability algorithm above has failed to find a cycle, i.e. $\verb|recur|$ is not entirely contained in $pre\_reach$, then it means that when a state satisfying $f$ is visited, it is not guaranteed that its post states will stay respecting $\neg g$. Then eventually, a post state will satisfy $g$. In this case, the $\verb|break|$ command in the repeatability algorithm will not be called and the flag $is\_repeatable$ will remain as $\verb|FALSE|$. The $\verb|check_react_spec|(spec)$ function will then return a tuple $\verb|(True, None)|$, with $\verb|True|$ meaning that the reactivity specification of interest is respected.
+
+\begin{algorithmic}[1]
+\If{NOT $is\_repeatable$}
+    \State \textbf{return }$(True, None)$
+\EndIf
+\end{algorithmic}
+
+\subsection{Non Reactivity Specifications}
+
+If the specification is not respected by the SMV model, then the above repeatability algorithm would have stopped and have the flag $is\_repeatable$ set as as $\verb|True|$. In this case, our function $\verb|check_react_spec|(spec)$ should return a tuple with the first element is $\verb|False|$ and the second element is an execution of the SMV model that violates spec. As our repeatability algorithm above does not look for a specific path recording a path with a state appearing twice, we need to first find the cycle in the SMV model, build the loop and finally, find a path to connect a state in this loop from an initial state.
+
+Recalling the  discussed in lectures, the pseudocodes for finding a cycle and building a loop are as follows:
+
+$\bf{INSERT CODE HERE}$
+
+$\bf{INSERT CODE HERE}$
+
+Now that we have a path of a loop of states and inputs with $f$ occuring repeatedly without $g$ being true, we can start searching for the states' preimages and repeat until we find an initial state. This initial state would have the quickiest path to this loop, the path is also recorded.
+
+$\bf{INSERT CODE HERE}$
+
+$images$ contains the path of states from the initial state of the SMV model, to one of the states in the cycle with $f$ occuring repeatedly without $g$ being true. The final step of our algorithm is to find the inputs between each interim state in this path, we can construct this as follows:
+
+\begin{enumerate}
+    \item Start from the initial state, we can compute the post image of the state by using $\verb|POST()|$.
+    \item Find the intersection between this post image and the second image of $images$, as this is the "next" state which will lead to a state in the counterexample cycle. Record this state.
+    \item Find an input required to go from the initial state to this intersection by applying the functions $\verb|GET_INPUTS_BETWEEN_STATES|$ and $\verb|PICK\_ONE\_INPUTS|$. Record this input set.
+    \item Similar to step 2, find intersection between the post image of the current state and the next image of $images$. Record this state.
+    \item Similar to step 3, find a possible input required to go from the current state to this intersection. Record this input set.
+    \item Repeat step 4 and 5, until we reach to the cycle with $f$ occuring repeatedly without $g$ being true.
+\end{enumerate}
+
+\medskip
+
+\begin{algorithmic}[1]
+\Function{FIND\_TRACE}{$bddfsm, init, images, counter\_example\_original$}
+    \State $trace \leftarrow []$
+    \State $start \leftarrow init$
+    \For{$i\leftarrow1$ $\bf{to}$ $n$} \Comment{LENGTH(images - 1)}
+        \State $start \leftarrow$ INTERSECTION$(start, images[i])$
+        \State $next\_state \leftarrow$ PICK\_ONE\_STATE$(start)$
+        \State APPEND$(trace, next\_state)$
+        \State $post \leftarrow$ INTERSECTION(POST$(start), images[i+1])$
+        \State $inputs \leftarrow$ GET\_INPUTS\_BETWEEN\_STATES$(start, post)$
+        \State APPEND$(trace,$ PICK\_ONE\_INPUTS$(inputs))$
+        \State $start \leftarrow post$
+    \EndFor
+    \State APPEND$(trace, counter\_example\_original)$
+    \State \textbf{return }$trace$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $images$ is the output from $BACKWARD\_IMAGE\_COMP$ function, $counter\_example\_original$ is a state in the cycle which is a counterexample selected by the function BACKWARD\_IMAGE\_COMP, which is equivalent to $images[n]$, where $n$ is the index of the last member of $images$.
+\State $trace\leftarrow$ FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+\State POST := $trace$ contains the states and inputs which is the path to get from the initial state to the repeating cycle as a counterexample.
+\end{algorithmic}
+
+\medskip
+
+Finally, the set of states and inputs can be returned by the function $\verb|check_react_spec|(spec)$ which shows a counterexample of how a repeating cycle of states in the model invalidates the specification. Starting from the initial state, then the first set of inputs, then to the next state, second set of inputs, and repeat until the counter example of reachable state is listed.
+
+\medskip
+
+$\bf{To update below...}$
+
+\begin{algorithmic}[1]
+\If{$is_repeatable = True$}
+    \State $find_cycle$
+    \State $images,counter\_example\_original \leftarrow$ \newline
+            \hspace*{5em}BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+    \State $trace \leftarrow$ \newline
+            \hspace*{5em}FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+    \State \textbf{return }$(False, trace)$
+\EndIf
+\end{algorithmic}
+
+\section{Discussion}
+
+During the process of implementing a solution to this problem, the correctness of the algorithm and the search for a counterexample were ensured. This is done by using $\verb|While|$ loops in the search for repeated states and counterexamples throughout the $\verb|check_react_spec|(spec)$ function. For example, the symbolic algorithm of Repeatability would only start and end under specific conditions. In its most outer loop, the algorithm would only start looking for repeated states under the condition that there is a least one state which satisfies the specification $f$ but not $g$ and is reachable in the SMV model. The algorithm will stop once it finds a loop of states which satisfy the specification $f$ but not $g$, or until all possible states are checked, thus finishing the loop.
+
+\medskip
+
+The True/False answer correctly for all cases in our custom function $\verb|check_react_spec|(spec)$, this is ensured by only modifying the flag $is\_repeatable$ when a path of loop is found between states which satisfy the specification $f$ but not $g$ in a SMV model. In another word, there is a possibility that when specification $f$ is satisfied, $g$ may not be satisfied afterwards. In a case where the specification $g$ is respected whenever $f$ is respected, the flag $\verb|check_react_spec|(spec)$ will not be changed.
+
+\medskip
+
+The search for counterexamples was implemented with a symbolic approach in our implementation, as it relies solely on using functions provided by the $\verb|PyNuSMV|$ and that the whole function is fulfilled by BDDs. The counterexamples are found by first finding the repeated loop with states respecting "$f$ but not $g$" by searching pre- and post-images of states, with functions such as $\verb|PRE()|$, $\verb|POST()|$ and $\verb|INTERSECTION()|$. Then a path to the initial states is also found with the $\verb|PRE()|$ function. The inputs between states are found with the function $\verb|get_inputs_between_states()|$ and $\verb|pick_one_inputs()|$. By working within the FSM environment, this proves that these counterexamples are real executions of the system. The outputs are construct in the same presentation as the built in function $\verb|check_explain_ltl_spec|$, which are in the correct form as expected.
+
+\section{Conclusion}
+
+In this report, we have showcased an implementation to replicate the $\verb|check_explain_ltl_spec|$ function in the $\verb|mc|$ module of the $\verb|PyNuSMV|$ Python library. We have explained and reasoned the methodology used in our solution and through the Discussion section, we have ensured that our implementation is correct, has the symbolic approach and that the results from the algorithm matches what is required.
+
+
+\section{Conclusion}
+
+\end{document}

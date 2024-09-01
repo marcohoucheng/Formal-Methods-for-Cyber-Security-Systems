@@ -1,0 +1,67 @@
+\documentclass{article}
+\usepackage{algpseudocode}
+\begin{document}
+\begin{algorithmic}
+
+\Function{REACH}{$bddfsm, init$}
+    \State $reach\leftarrow init$
+    \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \While{$new\not=$ INTERSECTION$(reach, new)$}
+        \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+        \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \EndWhile
+    \State \textbf{return }$reach$
+\EndFunction
+
+\medskip
+
+\Function{BACKWARD\_IMAGE\_COMP}{$bddfsm, counter\_examples, init$}
+    \State $images \leftarrow []$
+    \State $pre\_counter\_example \leftarrow$ PICK\_ONE\_STATE\_RANDOM$(counter\_examples)$
+    \State $counter\_example\_original \leftarrow pre\_counter\_example$
+    \State APPEND$(images, pre\_counter\_example)$
+    \While{INTERSECTION$(init, pre\_counter_example)\not=\emptyset$}
+        \State $counter\_example \leftarrow pre\_counter\_example$
+        \State $pre\_counter\_example \leftarrow$ PRE$(bddfsm, counter\_example)$
+        \State INSERT$(images, pre\_counter\_example)$
+    \EndWhile
+    \State \textbf{return }$images, counter\_example\_original$
+\EndFunction
+
+\medskip
+
+\Function{FIND\_TRACE}{$bddfsm, init, images, counter\_example\_original$}
+    \State $trace \leftarrow []$
+    \State $start \leftarrow init$
+    \For{$i\leftarrow1$ $\bf{to}$ $n$} \Comment{LENGTH(images - 1)}
+        \State $start \leftarrow$ INTERSECTION$(start, images[i])$
+        \State $next\_state \leftarrow$ PICK\_ONE\_STATE$(start)$
+        \State APPEND$(trace, next\_state)$
+        \State $post \leftarrow$ INTERSECTION(POST$(start), images[i+1])$
+        \State $inputs \leftarrow$ GET\_INPUTS\_BETWEEN\_STATES$(start, post)$
+        \State APPEND$(trace,$ PICK\_ONE\_INPUTS$(inputs))$
+        \State $start \leftarrow post$
+    \EndFor
+    \State APPEND$(trace, counter\_example\_original)$
+    \State \textbf{return }$trace$
+\EndFunction
+
+\medskip
+
+\Function{CHECK\_EXPLAIN\_INV\_SPEC}{$(bddfsm, spec)$}
+    \State $nspec \leftarrow \neg(spec)$
+    \State $bddspec \leftarrow$ SPEC\_TO\_BDD$(bddfsm, nspec)$
+    \State $reach \leftarrow$ REACH$(bddfsm, init)$
+    \If{INTERSECTION$(bddspec, reach) = \emptyset$}
+        \State \textbf{return }$(True, None)$
+    \Else
+        \State $counter\_examples \leftarrow$ INTERSECTION$(bddspec, reach)$
+        \State $images,counter\_example\_original \leftarrow$ \newline
+                \hspace*{5em}BACKWARD\_IMAGE\_COMP$(bddfsm, counter\_examples, init)$
+        \State $trace \leftarrow$ \newline
+                \hspace*{5em}FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+        \State \textbf{return }$(False, trace)$
+    \EndIf
+\EndFunction
+\end{algorithmic}
+\end{document}

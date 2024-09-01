@@ -1,0 +1,186 @@
+\documentclass{article}
+\usepackage{algpseudocode}
+\usepackage{url}
+
+%\usepackage[utf8]{inputenc}
+
+\title{Formal Methods for Cyber-Physcial Systems - Invariant Verification Assignment}
+\author{Federico Brian, Hou Cheng Lam, Kourosh Marjouei}
+\date{December 2022}
+\begin{document}
+\maketitle
+\tableofcontents
+
+\newpage
+
+\section{Introduction}
+
+The goal of this project is to replicate the $\verb|check_explain_ltl_spec|$ function in the $\verb|mc|$ module of the $\verb|PyNuSMV|$ Python library, is a Python wrapper to $\verb|NuSMV|$ symbolic model checking algorithms. The $\verb|check_xplain_ltl_spec|$ function takes a LTL given specification as an input, it is then checked against the SMV model which is loaded within the working environment. The specification is expected to be of type invariant, however this is not verified by the built in function. The function returns a tuple, with its first element returning a boolean, it is $\verb|TRUE|$ if all reachable states of the SMV model satisfies the specification, and $\verb|FALSE|$ otherwise. If the first element of the tuple is $\verb|TRUE|$, then the second element of the tuple will be set to $\verb|None|$. Otherwise, the function returns a counterexample of a path showing the SMV model violating the specification, starting from the initial states. Note that there can be more than 1 counterexample if the SMV model violates the specification. This explanation is a tuple of alternating states and inputs, starting and ending with a state.
+
+\medskip
+
+In this report, we will discuss the methodology used in our implementation to replicate the function $\verb|check_explain_ltl_spec|$. The correctness of our implementations will also be validated in the discussion section in this report.
+
+\section{Methodology}
+
+\subsection{Model Preparation}
+
+To work with any SMV Models, the loaded .smv file needs to be converted into type BddFsm, which is a Python class for FSM structure, encoded into BDDs. As the SMV model is loaded into the global environment, this can be done by calling $\verb|pynusmv.glob.prop_database().master.bddFsm|$. The $\verb|prop|$ library provides a method $\verb|prop.expr|$ to extract the each specification to check included in the .smv file. As $\verb|prop.expr|$ extracts specifications that are not limited for invariant checking, there is a constraint in place in the Python script to skip these specifications. For each specifications, the function $\verb|prop.not_|$ returns any states which do not satisfy the specification, i.e. states where the specifications are false. Finally, we can convert the sets of states from $\verb|prop.not_|$ into a BDD.
+
+\medskip
+
+\begin{algorithmic}[1]
+\State $nspec \leftarrow$ prop.not\_$(spec)$
+\State $bddspec \leftarrow$ SPEC\_TO\_BDD$(bddfsm, nspec)$
+\end{algorithmic}
+
+\subsection{Invariant Check and Reachable States}
+
+By definition, a specification $\varphi$ over state variables is an invariant of the transition system if every reachable state satisfies $\varphi$. In other words, every reachable state must be true according to the invariant specification.
+
+\medskip
+
+Using the definition of an invariant specification, we can start building our algorithm by finding all reachable states for any given SMV models. Trivially, initial states are reachable states. By using the initial states specified in the SMV models, the $\verb|Post()|$ function can be used to discover the states within the Post Image of the existing BDD structure, namely all states which can be reached from the initial states according to the SMV model, any states from this Post Image which are not members of the initial states are added to the set of reachable states. The remaining reachable states can then be found by recursively applying the $\verb|Post()|$ function to the current set of reachable states within the BDD structure. Simialrly as above, any newly discovered states are then added to this set/image of reachable states until no new states are found. The final image is the full set of reachable states within a SMV model.
+
+\medskip
+
+\begin{algorithmic}[1]
+\Function{REACH}{$bddfsm, init$}
+    \State $reach\leftarrow init$
+    \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \While{$new\not=$ INTERSECTION$(reach, new)$}
+        \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+        \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \EndWhile
+    \State \textbf{return }$reach$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states.
+\State $reach\leftarrow$ REACH$(bddfsm, init)$
+\State POST := $reach$ contains the BDD of all reachable states of the SMV Model.
+\end{algorithmic}
+
+\subsection{Invariant Specifications}
+
+Recall that if a specification is an invariant for a SMV model, then all of its reachable states respect (hold true to) the specification. Therefore, no reachables states should exist in the BDD created by $\verb|prop.not_|$, as this BDD represents the states which are not true to the specification. In other words, if the intersection between the set of reachable states and the BDD created by $\verb|prop.not_|$ is empty, then the specification can be concluded as an invariant. The function will return a tuple $\verb|(True, None)|$, with $\verb|True|$ meaning that the specification of interest is an invariant.
+
+\medskip
+
+\begin{algorithmic}[1]
+\If{INTERSECTION$(bddspec, reach) = \emptyset$}
+	\State \textbf{return }$(True, None)$
+\EndIf
+\end{algorithmic}
+
+\subsection{Non Invariant Specifications}
+
+However, if the intersection is not empty, then there is at least one reachable state which does not hold true for the specification. In this case, a counterexample is needed as evidence. We can construct a counterexample as follows.
+
+\begin{enumerate}
+	\item Randomly select a reachable state which violates the specification, record this state.
+	\item Find the preimage of this state, that is, the set of states that could lead to the selected reachable state in 1.
+	\item Record the preimage found.
+	\item Find the preimage of the current preimage, that is, the set of states that could lead to the selected imagine recorded in 3.
+	\item Repeat step 3 and 4, until we find an initial state.
+\end{enumerate}
+
+\medskip
+
+\begin{algorithmic}[1]
+\State $counter\_examples \leftarrow$ INTERSECTION$(bddspec, reach)$
+\Function{BACKWARD\_IMAGE\_COMP}{$bddfsm, init, counter\_examples$}
+    \State $images \leftarrow []$
+    \State $pre\_counter\_example \leftarrow$ PICK\_ONE\_STATE\_RANDOM$(counter\_examples)$
+    \State APPEND$(images, pre\_counter\_example)$
+    \While{INTERSECTION$(init, pre\_counter_example)\not=\emptyset$}
+        \State $counter\_example \leftarrow pre\_counter\_example$
+        \State $pre\_counter\_example \leftarrow$ PRE$(bddfsm, counter\_example)$
+        \State INSERT$(images, pre\_counter\_example)$
+    \EndWhile
+    \State \textbf{return }$images, counter\_example\_original$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $counter\_examples$ contains the set of all states in the SMV Model which do not respect the LTL specification.
+\State $images\leftarrow$ BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+\State POST := $images$ contains a list of images where each image contains a set of states which are the preiamges of the next image. $counter\_example\_original$ is the random counter example selected by this alogrithm.
+\end{algorithmic}
+
+\medskip
+
+$images$ contains the path of states from the initial state of the SMV model, to the randomly selected reachable state which violates the specification for variant checking. The final step of our algorithm is to find the inputs between each interim state in this path, we can construct this as follows:
+
+\begin{enumerate}
+    \item Start from the initial state, we can compute the post image of the state by using $\verb|POST()|$.
+    \item Find the intersection between this post image and the second image of $images$, as this is the "next" state which will lead to our counterexample state. Record this state.
+    \item Find an input required to go from the initial state to this intersection by applying the functions $\verb|GET_INPUTS_BETWEEN_STATES|$ and $\verb|PICK\_ONE\_INPUTS|$. Record this input set.
+    \item Similar to step 2, find intersection between the post image of the current state and the next image of $images$. Record this state.
+    \item Similar to step 3, find a possible input required to go from the current state to this intersection. Record this input set.
+    \item Repeat step 4 and 5, until we reach to the counterexample.
+\end{enumerate}
+
+\medskip
+
+\begin{algorithmic}[1]
+\Function{FIND\_TRACE}{$bddfsm, init, images, counter\_example\_original$}
+    \State $trace \leftarrow []$
+    \State $start \leftarrow init$
+    \For{$i\leftarrow1$ $\bf{to}$ $n$} \Comment{LENGTH(images - 1)}
+        \State $start \leftarrow$ INTERSECTION$(start, images[i])$
+        \State $next\_state \leftarrow$ PICK\_ONE\_STATE$(start)$
+        \State APPEND$(trace, next\_state)$
+        \State $post \leftarrow$ INTERSECTION(POST$(start), images[i+1])$
+        \State $inputs \leftarrow$ GET\_INPUTS\_BETWEEN\_STATES$(start, post)$
+        \State APPEND$(trace,$ PICK\_ONE\_INPUTS$(inputs))$
+        \State $start \leftarrow post$
+    \EndFor
+    \State APPEND$(trace, counter\_example\_original)$
+    \State \textbf{return }$trace$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $images$ is the output from BACKWARD\_IMAGE\_COMP function, $counter\_example\_original$ is the random counter example selected by the function BACKWARD\_IMAGE\_COMP, which is equivalent to $images[n]$, where $n$ is the index of the last member of $images$.
+\State $trace\leftarrow$ FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+\State POST := $trace$ contains the states and inputs which is the path to get from the initial state to the counterexample.
+\end{algorithmic}
+
+\medskip
+
+Finally, the set of states and inputs can be returned by the function $\verb|check_explain_inv_spec|$ which shows a counterexample of how a reachable state of the model invalidates the specification. Starting from the initial state, then the first set of inputs, then to the next state, second set of inputs, and repeat until the counter example of reachable state is listed.
+
+\medskip
+
+\begin{algorithmic}[1]
+\If{INTERSECTION$(bddspec, reach) \not= \emptyset$}
+	\State $counter\_examples \leftarrow$ INTERSECTION$(bddspec, reach)$
+    \State $images,counter\_example\_original \leftarrow$ \newline
+            \hspace*{5em}BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+    \State $trace \leftarrow$ \newline
+            \hspace*{5em}FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+    \State \textbf{return }$(False, trace)$
+\EndIf
+\end{algorithmic}
+
+\section{Discussion}
+
+During the process of implementing a solution to this problem, the correctness of the algorithm and the counterexample search were ensured. This is done by using $\verb|While|$ loops in the functions $\verb|Reach|$ and $\verb|BACKWARD_IMAGE_COMP|$. In both cases, the algorithms would only start and end under specific conditions. For example, in the $\verb|While|$ loop within $\verb|Reach|$, the algorithm would only start looking for new reachable under the condition that there are new states in $\verb|POST|(init)$ where their reachable states have not been found, and the algorithm will stop once it does not find any new reachable states. Thus preventing us from looking for states which have already been discovered.
+
+\medskip
+
+The True/False answer correctly for all cases in our custom function $\verb|check_explain_inv_spec|$, this is ensured by accepting the invariant only when all reachable states of any SMV models respect the LTL condition. In other words, the set of reachable states is a subset of the set of states which respect the LTL condition, which is equivalent in saying that the intersection between the set of reachable states and the set of states which DO NOT respect the LTL condition, which is the solution of our implementation.
+
+\medskip
+
+The search for counterexamples was implemented with a symbolic approach in our implementation, as it relies solely on using functions provided by the $\verb|PyNuSMV|$ and that the whole function is fulfilled by BDDs. These counterexamples are found by first backward searching preimages from the counterexample until an initial state. By forward finding a valid input with the build in function $\verb|get_inputs_between_states|$ between each interim state from the initial state to the counterexample, this proves that these counterexamples are real executions of the system. The outputs are construct in the same presentation as the built in function $\verb|check_explain_ltl_spec|$, which are in the correct form as expected.
+
+\section{Conclusion}
+
+In this report, we have showcased an implementation to replicate the $\verb|check_explain_ltl_spec|$ function in the $\verb|mc|$ module of the $\verb|PyNuSMV|$ Python library. We have explained and reasoned the methodology used in our solution and through the Discussion section, we have ensured that our implementation is correct, has the right (symbolic) approach and that the results from the algorithm matches what is required.
+
+\nocite{lvl-2013-707009}
+\nocite{alur_2015}
+\nocite{nusmv}
+\nocite{pynusmv}
+
+\bibliographystyle{plain}
+\bibliography{citation}
+
+\end{document}

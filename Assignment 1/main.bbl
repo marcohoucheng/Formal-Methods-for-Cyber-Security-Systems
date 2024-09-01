@@ -1,0 +1,21 @@
+\begin{thebibliography}{1}
+
+\bibitem{nusmv}
+Nusmv: A new symbolic model checker.
+\newblock \url{https://nusmv.fbk.eu/}.
+
+\bibitem{pynusmv}
+Pynusmv 1.0rc8 documentation.
+\newblock \url{https://pynusmv.readthedocs.io/}.
+
+\bibitem{alur_2015}
+Rajeev Alur.
+\newblock {\em Principles of Cyber-Physical Systems}.
+\newblock MIT Press, 2015.
+
+\bibitem{lvl-2013-707009}
+Simon Busard and Charles Pecheur.
+\newblock Pynusmv: Nusmv as a python library.
+\newblock volume 7871 of {\em LNCS}, pages 453--458. Springer-Verlag, 2013.
+
+\end{thebibliography}

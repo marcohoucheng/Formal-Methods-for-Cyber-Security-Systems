@@ -1,0 +1,52 @@
+\section{Discussion}
+
+During the process of implementing a solution to this problem, the correctness of the algorithm and the search for a counterexample were ensured. This is done by using $\verb|While|$ loops in the search for repeated states and counterexamples throughout the $\verb|check_react_spec|(spec)$ function. For example, the symbolic algorithm of Repeatability would only start and end under specific conditions. In its most outer loop, the algorithm would only start looking for repeated states under the condition that there is a least one state which satisfies the specification $f$ but not $g$ and is reachable in the SMV model. The algorithm will stop once it finds a loop of states which satisfy the specification $f$ but not $g$, or until all possible states are checked, thus finishing the loop.
+
+\medskip
+
+The True/False answer correctly for all cases in our custom function $\verb|check_react_spec|(spec)$, this is ensured by only modifying the flag $is\_repeatable$ when a path of loop is found between states which satisfy the specification $f$ but not $g$ in a SMV model. In another word, there is a possibility that when specification $f$ is satisfied, $g$ may not be satisfied afterwards. In a case where the specification $g$ is respected whenever $f$ is respected, the flag $\verb|check_react_spec|(spec)$ will not be changed.
+
+\medskip
+
+The search for counterexamples was implemented with a symbolic approach in our implementation, as it relies solely on using functions provided by the $\verb|PyNuSMV|$ and that the whole function is fulfilled by BDDs. The counterexamples are found by first finding the repeated loop with states respecting "$f$ but not $g$" by searching pre- and post-images of states, with functions such as $\verb|PRE()|$, $\verb|POST()|$ and $\verb|INTERSECTION()|$. Then a path to the initial states is also found with the $\verb|PRE()|$ function. The inputs between states are found with the function $\verb|get_inputs_between_states()|$ and $\verb|pick_one_inputs()|$. By working within the FSM environment, this proves that these counterexamples are real executions of the system. The outputs are construct in the same presentation as the built in function $\verb|check_explain_ltl_spec|$, which are in the correct form as expected.
+
+% OLD DISCUSSION FROM ASSINGMENT 1
+% \subsection{Basic correctness}
+% \textbf{\textit{Is the True/False answer correct for all cases?}}
+
+% \medskip
+
+% The True/False answer correctly for all cases in our custom function $\verb|check_explain_|$\\$\verb|inv_spec|$. This is ensured by accepting the invariant only when all reachable states of any SMV models respect the LTL condition. In other words, the set of reachable states is a subset of the set of states which respect the LTL condition, which is equivalent in saying that the intersection between the set of reachable states and the set of states which DO NOT respect the LTL condition, which is the solution of our implementation.
+
+% \subsection{Symbolic implementation}
+% \textbf{\textit{Is the basic reachability algorithm implemented with a symbolic approach?}}
+
+% \medskip
+
+% As depicted in \ref{subsec:invcheck}, the set of reachable states are computed using BDD operations such as \texttt{POST}, \texttt{INTERSECTION}, \texttt{UNION} and \texttt{DIFF}. They are then stored in a BDD-like structure called \texttt{bddfsm} of module \texttt{fsm} of \texttt{PyNuSMV}.
+
+% \subsection{Correctness of the counterexamples}
+% \textbf{\textit{Are the counterexample real executions of the system? Are they returned in the correct form?}}
+
+% \medskip
+
+% Counterexamples provided by our \texttt{check\_explain\_inv\_spec} function are ensured to represent real executions of the system by construction. This is possible because every state of the counterexample is computed twice. Firstly by computing pre-images with the \texttt{pre} function, and secondly by computing and crossing post-images with the previously found pre-images with \texttt{post} and \texttt{intersection} functions. The transition that needs to happen in order for a \textit{pre-state} to reach a \textit{post-state} is computed by the \texttt{get\_inputs\_between\_states} function. This machinery allows us to store states and their transitions in a coherent manner. We then return the result as a Python \texttt{tuple}, the same type as \texttt{pynusmv.mc.check\_explain\_ltl\_} \texttt{spec} function.
+
+% \subsection{Symbolic counterexample search}
+% \textbf{\textit{Is the search for counterexample implemented with a symbolic approach?}}
+
+% \medskip
+
+% Like the computation of reachable states, the search for counterexamples were implemented by us by exploiting a symbolic approach, namely, by using BDDs and their operations. We built a trace from an initial state to a counterexample by forward computing post-images and intersecting them with states already discovered
+% by the pre-image computation. In this way it is possible to build a trace starting from an initial state and ending to a state in which the invariant property does not hold.
+
+% \subsection{Justification of correctness}
+% \textbf{\textit{Does the report prove that the algorithm and the counterexample search are correct?}}
+
+% \medskip
+
+% During the process of implementing a solution to this problem, the correctness of the algorithm and the counterexample search were ensured. This is done by using $\verb|While|$ loops in the functions $\verb|Reach|$ and $\verb|BACKWARD_IMAGE_COMP|$. In both cases, the algorithms would only start and end under specific conditions, for example, in the $\verb|While|$ loop within $\verb|Reach|$, the algorithm would only start looking for new reachable under the condition that there are new states in $\verb|POST|(init)$ where their reachable states have not been found, and the algorithm will stop once it does not find any new reachable states. Thus preventing us from looking for states which have already been discovered. This and other main topics are discussed in detail in sections \ref{subsec:modprep} and \ref{subsec:invcheck}. The invariant case is described in \ref{subsec:inv}, while the non-invariant case in \ref{subsec:noninv}
+
+
+
+% The search for counterexamples was implemented with a symbolic approach in our implementation, as it relies solely on using functions provided by the $\verb|PyNuSMV|$ and that the whole function is fulfilled by BDDs. These counterexamples are found by first backward searching preimages from the counterexample until an initial state. By forward finding a valid input with the build in function $\verb|get_inputs_between_states|$ between each interim state from the initial state to the counterexample, this proves that these counterexamples are real executions of the system. The outputs are construct in the same presentation as the built in function $\verb|check_explain_ltl_spec|$, which are in the correct form as expected.

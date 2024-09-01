@@ -1,0 +1,111 @@
+\documentclass{article}
+\usepackage{algpseudocode}
+\usepackage{amssymb}
+\begin{document}
+\begin{algorithmic}
+
+\Function{IS\_BOOLEAN\_FORMULA}{$spec$}
+      \If{$spec\_Type \in BasicTypes$}
+                 \State \textbf{return }$ True$
+      \EndIf  
+         \If{$spec\_Type = \neg$}
+                 \State \textbf{return } IS\_BOOLEAN\_FORMULA$(spec.LHS)$
+      \EndIf 
+      \If{$spec\_Type \in BooleanOP$}
+                 \State \textbf{return } IS\_BOOLEAN\_FORMULA$(spec.LHS) \land $ IS\_BOOLEAN\_FORMULA$(spec.RHS)$
+      \EndIf 
+      \State \textbf{return }$False$
+\EndFunction
+\\
+\Function{CHECK\_GF\_FORMULA}{$spec$}
+      \If{$spec\_Type \not= \square $}
+                 \State \textbf{return }$ False$
+      \EndIf  
+      \If{$spec\_Type \not= \diamondsuit $}
+                 \State \textbf{return }$ False$
+     \EndIf 
+      \If{IS\_BOOLEAN\_FORMULA$(spec.LHS)$= True}
+             \State \textbf{return }$ spec.LHS$
+      \Else
+       \State \textbf{return }$ None$
+      \EndIf 
+\EndFunction
+\\
+\Function{Parse\_React}{$spec$}
+      \If{$spec\_Type \not= Context$}
+        \State \textbf{return }$ None$
+       \EndIf 
+  \State $spec \leftarrow spec\_RHS$
+  \If{$spec\_Type \not=  \rightarrow$}
+        \State \textbf{return }$ None$
+       \EndIf  
+   \State $f \leftarrow$ CHECK\_GF\_FORMULA$(spec\_LHS)$
+  % \State $new\leftarrow$ POST$(bddfsm, reach)$
+   \If{$f = None$}
+        \State \textbf{return }$ None$
+       \EndIf  
+   \State $g \leftarrow$ CHECK\_GF\_FORMULA$(spec\_RHS)$
+   \If{$g = None$}
+        \State \textbf{return }$ None$
+       \EndIf  
+\State \textbf{return }$ (f, g)$
+\EndFunction
+\\
+\Function{CHECK\_REACT\_SPEC}{$spec$}
+ \If{Parse\_React$(spec) = None$}
+        \State \textbf{return }$ None$
+\Else
+%  \State $bddfsm \leftarrow $ prop\_database$()$.master.bddFsm
+     \State $ f, g \leftarrow $ Parse\_React$(spec)$  
+     \State $ng \leftarrow \neg(g)$
+     \State $bddspec\_f \leftarrow$ SPEC\_TO\_BDD$(bddfsm, f)$
+     \State $bddspec\_ng \leftarrow$ SPEC\_TO\_BDD$(bddfsm, ng)$
+     \State $reach \leftarrow$ REACH$(bddfsm, init)$
+     \State $new\leftarrow$ POST$(bddfsm, reach)$
+      \While{$new\not=$ INTERSECTION$(reach, new)$}
+           \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+           \State $new\leftarrow$ POST$(bddfsm, reach)$
+     \EndWhile
+     \State $cycle\leftarrow $INTERSECTION(INTERSECTION$(reach, f),ng$)
+     \State $found\_cycle\leftarrow \emptyset$
+     \State $sub\_reach\leftarrow reach$
+     \While{INTERSECTION$(sub\_reach, cycle)$ $\wedge$ $\neg(found\_cycle)$ }
+           \State $sub\_reach\leftarrow $INTERSECTION(PRE$(reach, f),ng$)
+           \State $new \leftarrow sub\_reach$
+           \While {count\_states(bddfsm, new) $>$ 0}
+                  \State $sub\_reach\leftarrow$ UNION(DIFF$(new, sub\_reach),sub\_reach$)
+                  \If{entailed($sub\_reach, cycle)$}
+                    \State  $found\_cycle\leftarrow True$
+                    \State $break$
+                  \EndIf  
+           \State $new \leftarrow$ INTERSECTION(DIFF(PRE$(bddfsm,new),sub\_reach),bddspec\_ng$)
+            \EndWhile
+            \State $cycle\leftarrow$ INTERSECTION$(sub\_reach,cycle)$
+     \EndWhile
+         \If{$\neg(found\_cycle)$ = True}
+        \State \textbf{return }$ True$
+        \EndIf
+\EndIf
+\EndFunction
+\\
+
+
+
+%\Function{BACKWARD\_IMAGE\_COMP}{$bddfsm, counter\_examples, init$}
+ %   \State $images \leftarrow []$
+ %   \State $counter\_example \leftarrow$ PICK\_ONE\_STATE\_RANDOM$(counter\_examples)$
+   % \State $pre\_counter\_example \leftarrow counter\_example$
+   % \State $counter\_example\_original \leftarrow counter\_example$
+    %\State APPEND$(images, counter\_example)$
+ %   \While{INTERSECTION$(init, pre\_counter_example)\not=\emptyset$}
+    %    \State $counter\_example \leftarrow pre\_counter\_example$
+    %    \State $pre\_counter\_example \leftarrow$ PRE$(bddfsm, counter\_example)$
+       % \State INSERT$(images, pre\_counter\_example)$
+    %\EndWhile
+   % \State \textbf{return }$images, counter\_example\_original$
+%\EndFunction
+%\\
+
+\end{algorithmic}
+\end{document}
+

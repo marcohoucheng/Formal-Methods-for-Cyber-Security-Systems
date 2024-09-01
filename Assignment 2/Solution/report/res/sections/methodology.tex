@@ -1,0 +1,376 @@
+\section{Methodology}
+
+\subsection{Model Preparation}
+
+To work with any SMV Models, the loaded .smv file needs to be converted into type BddFsm, which is a Python class for FSM structure, encoded into BDDs. As the SMV model is loaded into the global environment, this can be done by calling $\verb|pynusmv.glob.prop_database().master.bddFsm|$. The $\verb|prop|$ library provides a method $\verb|prop.expr|$ to extract the each specification to check included in the .smv file. As $\verb|prop.expr|$ extracts specifications that are not limited for reactivity checking, there is already a constraint in place in the Python script to skip these specifications. This is done by first checking whether the spec is of type LTL, then the LTL spec is split into 2 parts: the left and the right. The algorithm then confirms that each of these formulas are of type 'GF', which is a LTL specification representing 'always eventually', or equivalently, 'repeatedly'. Finally, the two specifications are checked to be boolean formulas before the program proceeds with the rest of $\verb|check_react_spec|(spec)$, which is described below.
+
+\medskip
+
+As the $\verb|check_react_spec|(spec)$ function does not pass the global FSM environment, we need to first retrieve and store it. The left side and right side of the specification to check for reactivity is then seperated into 2 specifications by $\verb|parse_react|(spec)$, namely $f$ and $g$.
+
+\subsection{Reachable States}
+
+Before checking whether a specification satifies the reactivity requirement, we need to create a BDD which contains all reachable states in a FSM structure. Reachable states are states can be visited under a SMV model. Trivially, initial states are reachable states. By using the initial states specified in the SMV models, the $\verb|Post()|$ function can be used to discover the states within the Post Image of the existing BDD structure, namely all states which can be reached from the initial states according to the SMV model, any states from this Post Image which are not members of the initial states are added to the set of reachable states. The remaining reachable states can then be found by recursively applying the $\verb|Post()|$ function to the current set of reachable states within the BDD structure. Simialrly as above, any newly discovered states are then added to this set/image of reachable states until no new states are found. The final image is the full set of reachable states within a SMV model.
+
+\begin{algorithmic}[1]
+\Function{REACH}{$bddfsm, init$}
+    \State $reach\leftarrow init$
+    \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \While{$new\not=$ INTERSECTION$(reach, new)$}
+        \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+        \State $new\leftarrow$ POST$(bddfsm, reach)$
+    \EndWhile
+    \State \textbf{return }$reach$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states.
+\State $reach\leftarrow$ REACH$(bddfsm, init)$
+\State POST := $reach$ contains the BDD of all reachable states of the SMV Model.
+\end{algorithmic}
+
+\subsection{Reactivity Check}
+
+Recall that the reactivity specification of interest in this report has the special form
+
+\[ \Box\Diamond f \rightarrow \Box\Diamond g\]
+
+where f and g are Boolean combination of base formulas with no temporal operators. In other words, a SMV model satisfies a reactive formula whenever a state satisfying $f$ is visited, another state satisfying $g$ will also be visited eventually (with certainty), and this happens infinitely often. \newline 
+
+The first thing we have to do in order to solve the requested task, is to negate the reactivity formula, yielding:
+\[ \neg(\Box\Diamond f\rightarrow \Box\Diamond g) = \Box\Diamond f\rightarrow \Diamond\Box \neg g \]
+
+% We can manipulate the reactivity formula in order to get an equivalent formula in 'Repeatably' form, as  shown below:
+% \begingroup
+% \allowdisplaybreaks
+% \begin{align*}
+%     \Box\Diamond f \rightarrow \Box\Diamond g & = \neg(\Box\Diamond f \rightarrow \Diamond\Box g) && \neg(\Box\Diamond f \rightarrow \Box\Diamond g) = \Box\Diamond f \rightarrow \Diamond\Box g\\
+%         & = \neg(\neg\Box\Diamond f\ \vee\ \Diamond\Box g) && \Box\Diamond f\rightarrow \Diamond\Box g = \neg \Box\Diamond f\ \vee\ \Diamond\Box g\\
+%         & = \neg(\neg\Box\Diamond f\ \vee\ \neg\neg\Diamond\Box g) && \Diamond\Box g = \neg\neg\Diamond\Box g\\
+%         & = \neg(\neg\Box\Diamond f\ \vee\ \neg\Box\neg\Box g) && \neg\Diamond\Box g = \Box\neg\Box g\\
+%         & = \neg(\neg\Box\Diamond f\ \vee\ \neg\Box\Diamond\neg g) && \neg\Box g = \Diamond\neg g\\
+%         & = \neg\neg\Box\Diamond f\ \wedge\ \neg\neg\Box\Diamond\neg g && \text{(De Morgan)} \\
+%         & = \Box\Diamond f\ \wedge\ \Box\Diamond\neg g && \neg\neg A = A\\
+%         & = \Box\Diamond(f\ \wedge\ \neg g) && \text{(distributivity of $\Box$ and $\Diamond$)}
+% \end{align*}
+% \endgroup
+
+Therefore, to check if the loaded SMV model respects a reactivity formula, it suffices to check wheter there is a cycle that satisfies $f\ \wedge\ \neg g$, \emph{i.e.}, if $f\ \wedge\ \neg g$ is satisfied repeatedly. 'Repeatably' formulas are a specific type of formulas of the shape:
+    \[ \Box\Diamond f \]
+also known as 'always eventually' or 'global future'. Since we already have correct algorithms for computing the satisfiability of a formula in 'Repeatedly' form, then it suffices to implement coherently those algorithm in Python language using \texttt{PyNuSMV}'s functions and BDDs as data structures. In such a manner, we ensure overall correctness with a symbolic approach, as requested by this assignment.\newline
+
+% Equivalently, to check if a specification respects the reactivity property, one can check when a state satisfying $f$ is visited, and whether there is a path or a possibility that another state satisfying $g$ will be visited, before visiting a state satisfying $f$ again, thus creating a loop avoiding $g$. We will consider and implement the latter approach, \emph{i.e.} the SMV model respects the reactivity specification if there is not an infinite trace (\emph{i.e.} a cycle) that satisfies the following
+
+% \[ \Box\Diamond f \rightarrow \Diamond\Box \neg g\]
+
+In order to proceed in such fashion, we need to compute the negation of $g$ and then retrieve the BDD representing it. In the $\verb|PyNuSMV|$ library, the function $\verb|prop.not_|(spec)$ converts a specification $spec$ to its negative counterpart, \emph{i.e.} where the specification is false. We can use this, along with the \texttt{parse\_react} function, which retrieves base formulas $(f, g)$ from formula $spec$ if it is of the reactive type, \texttt{None} otherwise. Then we make use of the built-in $\verb|spec_to_bdd|$ function to build 2 BDD objects, one containing states that satisfise $f$ and the other containing states that satisfies $\neg g$ in the SMV model. Observe that if the provided LTL formula is not a reactive one, then the main algorithm takes no further actions in checking its satisfiability by terminating immediately.
+\medskip
+\begin{algorithmic}[1]
+\If{PARSE\_REACT($spec$) is $None$}
+    \State \textbf{return }$None$
+\EndIf
+\State $f, g \leftarrow$ PARSE\_REACT($spec$)
+\State $ng \leftarrow$ prop.not\_$(g)$
+\State $bddspec\_f \leftarrow$ SPEC\_TO\_BDD$(bddfsm, f)$
+\State $bddspec\_ng \leftarrow$ SPEC\_TO\_BDD$(bddfsm, ng)$
+\end{algorithmic}
+\medskip
+With the BDDs in place, we can start the algorithm with the new BDD $(recur)$ with states that are reachable and satisfying repeatedly both $f$ and $\neg g$. The repeatability algorithm works as follows:
+
+\medskip
+\begin{algorithmic}[1]
+\State $reach \leftarrow$ REACH($init$)
+\State $recur \leftarrow $INTERSECTION(INTERSECTION$(reach, bddspec\_f),bddspec\_ng$)
+\State $is\_repeatable \leftarrow False$ 
+\State $pre\_reach \leftarrow reach$
+\While{INTERSECTION$(pre\_reach, recur)$ $\wedge$ $\neg(is\_repeatable)$ }
+    \State $pre\_reach \leftarrow$ INTERSECTION(PRE$(recur),ng$)
+    \State $new \leftarrow pre\_reach$
+    \While {$new \neq \emptyset$}
+        \State $pre\_reach\leftarrow$ UNION($pre\_reach, new$)
+        \If{$recur\subseteq pre\_reach$}
+            \State  $is\_repeatable\leftarrow True$
+            \State $break$
+        \EndIf  
+        \State $new \leftarrow$ INTERSECTION(DIFF(PRE$(new),pre\_reach),bddspec\_ng$)
+    \EndWhile
+    \State $recur\leftarrow$ INTERSECTION$(pre\_reach,recur)$
+\EndWhile
+\end{algorithmic}
+
+\subsection{Reactivity Specifications}
+
+If our repeatability algorithm above has failed to find a cycle, \emph{i.e.} $\verb|recur|$ is not entirely contained in $pre\_reach$, then it means that when a state satisfying $f$ is visited, it is not guaranteed that its post states will stay respecting $\neg g$. Then eventually, a post state will satisfy $g$. In this case, the $\verb|break|$ command in the repeatability algorithm will not be called and the flag $is\_repeatable$ will remain as $\verb|FALSE|$. The $\verb|check_react_spec|(spec)$ function will then return a tuple $\verb|(True, None)|$, with $\verb|True|$ meaning that the reactivity specification of interest is respected.
+
+\begin{algorithmic}[1]
+\If{NOT $is\_repeatable$}
+    \State \textbf{return }$(True, None)$
+\EndIf
+\end{algorithmic}
+
+\subsection{Non Reactivity Specifications}
+
+If the specification is not respected by the SMV model, then the above repeatability algorithm would have stopped and have the flag $is\_repeatable$ set as as $\verb|True|$. In this case, our function $\verb|check_react_spec|(spec)$ should return a tuple with the first element is $\verb|False|$ and the second element is an execution of the SMV model that violates spec. As our repeatability algorithm above does not look for a specific path recording a path with a state appearing twice, we need to first find the cycle in the SMV model, build the loop and finally, find a path to connect a state in this loop from an initial state.
+
+Recalling the algorithms discussed in lectures, the pseudocodes for finding a cycle is the following:
+
+\begin{algorithmic}[1]
+\State $recur\_states \leftarrow recur$
+\State $found\_cycle \leftarrow False$
+\State $frontiers \leftarrow \emptyset$
+\State $s\leftarrow$ PICK\_STATE($recur\_states$)
+\While {$\neg found\_cycle$}
+    \State $R \leftarrow \emptyset$
+    \State $frontiers \leftarrow \emptyset$
+    \State $new \leftarrow $ INTERSECTION(POST($s$), $pre\_reach$)
+    \While {$new \neq \emptyset$}
+        \State $R \leftarrow$ UNION($R, new$)
+        \State APPEND($frontiers, R$)
+        \State $New \leftarrow$ INTERSECTION(POST($new$), $pre\_reach$)
+        \State $new \leftarrow$ DIFF($new, R$)
+    \EndWhile
+    \State $R\leftarrow$ INTERSECTION($R, recur$)
+    \If {$s\subseteq R$}
+        \State $found\_cycle \leftarrow True$
+    \Else
+        \State $s \leftarrow$ PICK\_STATE($recur\_states$)
+    \EndIf
+\EndWhile
+\end{algorithmic}
+
+\newpage 
+Moreover, the algorithm to build a cycle is shown below:
+
+\begin{algorithmic}[1]
+\State $k \leftarrow 0$
+\While {$s \nsubseteq frontiers[k]$}
+    \State $k \leftarrow k+1$
+\EndWhile    
+\State
+\State $path = [s]$
+\State $curr \leftarrow s$
+\For {$i \gets k-1 \textbf{ downto } 0$}
+    \State INTERSECTION(PRE($curr$), $frontiers[i]$)
+    \State $curr \leftarrow$ PICK\_STATE($pred$)
+    \State $path \leftarrow$ CONCAT(LIST($path),curr$)
+\EndFor
+\State $path \leftarrow$ CONCAT(LIST($s), path$)
+\end{algorithmic}
+\medskip
+
+Now that we have a path of a loop of states and inputs with $f$ occuring repeatedly without $g$ being true, we can start searching for the states' preimages and repeat until we find an initial state. This initial state would have the quickiest path to this loop, the path is also recorded.
+
+\begin{algorithmic}[1]
+\Function{BACKWARD\_IMAGE\_COMP}{}
+\State $images \leftarrow \emptyset$
+\State $counterex \leftarrow s$
+\State $pre\_counterex \leftarrow s$
+\While {INTERSECTION($pre\_counterex ,init) = \emptyset $}
+    \State $counterex \leftarrow pre\_counterex$
+    \State $pre\_counterex \leftarrow$ PRE($counterex$)
+    \State CONCAT(LIST($pre\_counterex), images$)
+\EndWhile
+\State \textbf{return} $images$
+\EndFunction
+\end{algorithmic}
+\medskip
+
+$images$ contains the path of states from the initial state of the SMV model, to one of the states in the cycle with $f$ occuring repeatedly without $g$ being true. The final step of our algorithm is to find the inputs between each interim state in this path, we can construct this as follows:
+
+\begin{enumerate}
+    \item Start from the initial state, we can compute the post image of the state by using $\verb|POST()|$.
+    \item Find the intersection between this post image and the second image of $images$, as this is the "next" state which will lead to a state in the counterexample cycle. Record this state.
+    \item Find an input required to go from the initial state to this intersection by applying the functions $\verb|GET_INPUTS_BETWEEN_STATES|$ and $\verb|PICK_ONE_INPUTS|$. Record this input set.
+    \item Similar to step 2, find intersection between the post image of the current state and the next image of $images$. Record this state.
+    \item Similar to step 3, find a possible input required to go from the current state to this intersection. Record this input set.
+    \item Repeat step 4 and 5, until we reach to the cycle with $f$ occuring repeatedly without $g$ being true.
+\end{enumerate}
+
+\newpage
+
+\begin{algorithmic}[1]
+\Function{FIND\_TRACE}{$bddfsm, init, images, counter\_example\_original$}
+    \State $trace \leftarrow \emptyset$
+    \State $start \leftarrow init$
+    \For{$i\leftarrow1$ $\bf{to}$ $n$} \Comment{LENGTH(images - 1)}
+        \State $start \leftarrow$ INTERSECTION$(start, images[i])$
+        \State $next\_state \leftarrow$ PICK\_ONE\_STATE$(start)$
+        \State APPEND$(trace, next\_state)$
+        \State $post \leftarrow$ INTERSECTION(POST$(start), images[i+1])$
+        \State $inputs \leftarrow$ GET\_INPUTS\_BETWEEN\_STATES$(start, post)$
+        \State APPEND$(trace,$ PICK\_ONE\_INPUTS$(inputs))$
+        \State $start \leftarrow post$
+    \EndFor
+    \State APPEND$(trace, counter\_example\_original)$
+    \State \textbf{return }$trace$
+\EndFunction
+\item[]
+\State PRE := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $images$ is the output from $BACKWARD\_IMAGE\_COMP$ function, $counter\_example\_original$ is a state in the cycle which is a counterexample selected by the function BACKWARD\_IMAGE\_COMP, which is equivalent to $images[n]$, where $n$ is the index of the last member of $images$.
+\State $trace\leftarrow$ FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+\State POST := $trace$ contains the states and inputs which is the path to get from the initial state to the repeating cycle as a counterexample.
+\end{algorithmic}
+
+\medskip
+
+Finally, the set of states and inputs can be returned by the function $\verb|check_react_spec|(spec)$ which shows a counterexample of how a repeating cycle of states in the model invalidates the specification. Starting from the initial state, then the first set of inputs, then to the next state, second set of inputs, and repeat until the counter example of reachable state is listed.
+
+% \medskip
+
+% $\bf{To update below...}$
+
+% \begin{algorithmic}[1]
+% \If{$is\_repeatable = True$}
+%     \State $find\_cycle$
+%     \State $images,counter\_example\_original \leftarrow$ \newline
+%             \hspace*{5em}BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+%     \State $trace \leftarrow$ \newline
+%             \hspace*{5em}FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+%     \State \textbf{return }$(False, trace)$
+% \EndIf
+% \end{algorithmic}
+
+% OLD METHODOLOGY FROM ASSINGMENT 1
+% \subsection{Model Preparation} \label{subsec:modprep}
+
+% To work with any SMV Models, the loaded .smv file needs to be converted into type \texttt{BddFsm}, which is a Python class for finite state machine-like (FSM-like) structures, encoded into BDDs. As the SMV model is loaded into the global environment, this can be done by calling $\verb|pynusmv.glob.prop_database().master.bddFsm|$. The $\verb|prop|$ library provides a method $\verb|prop.expr|$ to extract each specification to check included in the .smv file. As $\verb|prop.expr|$ extracts specifications that are not limited for invariant checking, there is a constraint in place in the Python script to skip these specifications. For each specifications, the function $\verb|prop.not_|$ computes the negation. Finally, we can get the sets of states of \texttt{bddfsm} satisfying $\verb|nspec|$ as a BDD by calling the function \texttt{SPEC\_TO\_BDD}, as shown in the snippet below.
+
+% \medskip
+
+% \begin{algorithmic}[1]
+% \State $nspec \leftarrow$ prop.not\_$(spec)$
+% \State $bddspec \leftarrow$ SPEC\_TO\_BDD$(bddfsm, nspec)$
+% \end{algorithmic}
+
+% \medskip
+
+% By computing \texttt{bddspec}, we found the BDD of states that satisfy \texttt{nspec}. However, if \texttt{spec} is an invariant, then no state contained in \texttt{bddspec} should be reachable from the initial states. That is the reason why we chose to compute the reachability BDD (a.k.a. the BDD of reachable states starting from the initial states) and then intersect them with \texttt{bddspec}: if the result is an empty BDD, then states in which \texttt{nspec} is true are never reached. If that is the case, then \texttt{spec} is an invariant.
+
+% \subsection{Invariant Check and Reachable States} \label{subsec:invcheck}
+
+% By definition, a specification $\varphi$ over state variables is an invariant of the transition system if every reachable state satisfies $\varphi$. In other words, every reachable state must be true according to the invariant specification.
+
+% \medskip
+
+% Using the definition of an invariant specification, we can start building our algorithm by finding all reachable states for any given SMV models. Trivially, initial states are reachable states. By using the initial states specified in the SMV models, the $\verb|post|$ function of $\verb|fsm|$ module can be used to discover the states within the Post Image of the existing BDD structure, namely all states which can be reached from the initial states according to the SMV model, any states from this Post Image which are not members of the initial states are added to the set of reachable states. The remaining reachable states can then be found by recursively applying the $\verb|post|$ function to the current set of reachable states within the BDD structure. Simialrly as above, any newly discovered states are then added to this set/image of reachable states until no new states are found. The final image is the full set of reachable states within a SMV model.
+
+% \medskip
+
+% \begin{algorithmic}[1] \label{algo1}
+% \Function{REACH}{$bddfsm, init$}
+%     \State $reach\leftarrow init$
+%     \State $new\leftarrow$ POST$(bddfsm, reach)$
+%     \While{$new\not=$ INTERSECTION$(reach, new)$}
+%         \State $reach\leftarrow$ UNION(DIFF$(new, reach),reach$)
+%         \State $new\leftarrow$ POST$(bddfsm, reach)$
+%     \EndWhile
+%     \State \textbf{return }$reach$
+% \EndFunction
+% \item[]
+% \State \textbf{PRE} := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states.
+% \State $reach\leftarrow$ REACH$(bddfsm, init)$
+% \State \textbf{POST} := $reach$ contains the BDD of all reachable states of the SMV Model.
+% \end{algorithmic}
+
+% \subsection{Invariant Specifications} \label{subsec:inv}
+
+% Recall that if a specification is an invariant for a SMV model, then all of its reachable states respect (hold true to) the specification. Therefore, no reachables states should be contained in the BDD returned by $\verb|SPEC_TO_BDD|$. This is because that BDD represents the states which are not true to the specification. In other words, if the intersection between the set of reachable states and the BDD created by $\verb|prop.not_|$ is empty, then the specification can be concluded as an invariant. The function will return a tuple $\verb|(True, None)|$, with $\verb|True|$ meaning that the specification of interest is an invariant.
+
+% \medskip
+
+% \begin{algorithmic}[1]
+% \If{INTERSECTION$(bddspec, reach) = \emptyset$}
+% 	\State \textbf{return }$(True, None)$
+% \EndIf
+% \item[]
+% \State \textbf{PRE} := $init$ is the set of initial states of $bddfsm$, $bddspec$ is the BDD of states of $bddfsm$ satisfying $nspec$, $reach$ contains the BDD of all reachable states of $bddfsm$.
+% \State \textbf{POST} := returns $True, None$ if no reachable state starting from  
+% $init$ is contained in $bddspec$, \emph{i.e.} if $spec$ is an invariant.
+% \end{algorithmic}
+
+% \subsection{Non Invariant Specifications} \label{subsec:noninv}
+
+% However, if the intersection is not empty, then there is at least one reachable state which does not hold true for the specification. In this case, a counterexample is needed as evidence. We can construct a counterexample as follows.
+
+% \begin{enumerate}
+% 	\item Randomly select a reachable state which violates the specification, store this state.
+% 	\item Find the pre-image of this state, that is, the set of states that could lead to the selected reachable state in 1 step, using the built-in \texttt{pre} function.
+% 	\item Store the pre-image found.
+% 	\item Find the pre-image of the current pre-image, that is, the set of states that could lead to the selected imagine stored in 3.
+% 	\item Repeat step 3 and 4, until we find an initial state.
+% \end{enumerate}
+
+% \medskip
+
+% \begin{algorithmic}[1]
+% \State $counter\_examples \leftarrow$ INTERSECTION$(bddspec, reach)$
+% \Function{BACKWARD\_IMAGE\_COMP}{$bddfsm, init, counter\_examples$}
+%     \State $images \leftarrow \emptyset$
+%     \State $pre\_counter\_example \leftarrow$ PICK\_ONE\_STATE\_RANDOM$(counter\_examples)$
+%     \State APPEND$(images, pre\_counter\_example)$
+%     \While{INTERSECTION$(init, pre\_counter\_example)\not=\emptyset$}
+%         \State $counter\_example \leftarrow pre\_counter\_example$
+%         \State $pre\_counter\_example \leftarrow$ PRE$(bddfsm, counter\_example)$
+%         \State INSERT$(images, pre\_counter\_example)$
+%     \EndWhile
+%     \State \textbf{return }$images, counter\_example\_original$
+% \EndFunction
+% \item[]
+% \State \textbf{PRE} := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $counter\_examples$ contains the set of all states in the SMV Model which do not respect the LTL specification.
+% \State $images\leftarrow$ BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+% \State \textbf{POST} := $images$ contains a list of images where each image contains a set of states which are the preiamges of the next image. $counter\_example\_original$ is the random counter example selected by this algorithm.
+% \end{algorithmic}
+
+% \medskip
+
+% $images$ contains the path of states from the initial state of the SMV model, to the randomly selected reachable state which violates the specification for variant checking. The final step of our algorithm is to find the inputs between each interim state in this path, we can construct this as follows:
+
+% \begin{enumerate}
+%     \item Start from the initial state, we can compute the post image of the state by using the built-in $\verb|post|$ function.
+%     \item Find the intersection between this post image and the second image of $images$, as this is the "next" state which will lead to our counterexample state. Store this state.
+%     \item Find an input required to go from the initial state to this intersection by utilising the functions $\verb|GET_INPUTS_BETWEEN_STATES|$ and $\verb|PICK_ONE_INPUTS|$. Store this input set.
+%     \item Similar to step 2, find intersection between the post image of the current state and the next image of $images$. Store this state.
+%     \item Similar to step 3, find a possible input required to go from the current state to this intersection. Store this input set.
+%     \item Repeat step 4 and 5, until we reach to the counterexample.
+% \end{enumerate}
+
+% \newpage
+
+% \begin{algorithmic}[1]
+% \Function{FIND\_TRACE}{$bddfsm, init, images, counter\_example\_original$}
+%     \State $trace \leftarrow \emptyset$
+%     \State $start \leftarrow init$
+%     \For{$i\leftarrow1$ $\bf{to}$ $n$} \Comment{LENGTH(images - 1)}
+%         \State $start \leftarrow$ INTERSECTION$(start, images[i])$
+%         \State $next\_state \leftarrow$ PICK\_ONE\_STATE$(start)$
+%         \State APPEND$(trace, next\_state)$
+%         \State $post \leftarrow$ INTERSECTION(POST$(start), images[i+1])$
+%         \State $inputs \leftarrow$ GET\_INPUTS\_BETWEEN\_STATES$(start, post)$
+%         \State APPEND$(trace,$ PICK\_ONE\_INPUTS$(inputs))$
+%         \State $start \leftarrow post$
+%     \EndFor
+%     \State APPEND$(trace, counter\_example\_original)$
+%     \State \textbf{return }$trace$
+% \EndFunction
+% \item[]
+% \State \textbf{PRE} := $bddfsm$ is the BDD of the system's FSM, $init$ is the BDD containing the initial states, $images$ is the output from BACKWARD\_IMAGE\_COMP function, $counter\_example\_original$ is the random counter example selected by the function BACKWARD\_IMAGE\_COMP, which is equivalent to $images[n]$, where $n$ is the index of the last member of $images$.
+% \State $trace\leftarrow$ FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+% \State \textbf{POST} := $trace$ contains the states and the transitions (inputs) which constitutes the path to get from an initial state to the randomly chosen counterexample.
+% \end{algorithmic}
+
+% \medskip
+% Finally, the set of states and inputs can be returned by the function $\verb|check_|$\\$\verb|explain_inv_spec|$ which shows a counterexample of how a reachable state of the model invalidates the specification. Starting from the initial state, then the first set of inputs, then to the next state, second set of inputs, and repeat until the counter example of reachable state is listed.
+
+% \medskip
+
+% \begin{algorithmic}[1]
+% \If{INTERSECTION$(bddspec, reach) \not= \emptyset$}
+% 	\State $counter\_examples \leftarrow$ INTERSECTION$(bddspec, reach)$
+%     \State $images,counter\_example\_original \leftarrow$ \newline
+%             \hspace*{5em}BACKWARD\_IMAGE\_COMP$(bddfsm, init, counter\_examples)$
+%     \State $trace \leftarrow$ \newline
+%             \hspace*{5em}FIND\_TRACE$(bddfsm, init, images, counter\_example\_original)$
+%     \State \textbf{return }$(False, trace)$
+% \EndIf
+% \item[] 
+% \State \textbf{PRE} := $bddfsm$ is the FSM of the system represented as a BDD, $init$ is the set of initial states of $bddfsm$, $bddspec$ is the BDD of states of $bddfsm$ satisfying $nspec$, $reach$ contains the BDD of all reachable states of $bddfsm$
+% \State \textbf{POST} := returns the couple $False, trace$ where $trace$ contains the states and the transitions (inputs) which constitutes the path to get from an initial state to the randomly chosen counterexample.
+% \end{algorithmic}

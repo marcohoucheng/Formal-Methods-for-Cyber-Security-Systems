@@ -1,0 +1,66 @@
+\documentclass[11pt,a4paper]{article}
+\input{./res/config/package}
+\input{./res/config/commands}
+\input{./res/config/docInfo}
+\graphicspath{ {./imgs/} }
+\backgroundsetup{
+	firstpage = {true},
+	placement = {center},
+	position = current page.center,
+	contents = {\includegraphics[scale=0.07]{unipd}},
+	angle = {0},
+	opacity = {0.1}
+} 
+\hypersetup{
+    colorlinks,
+    linkcolor={black},
+    citecolor={blue!50!black},
+    urlcolor={red!60!blue}
+}
+
+\setcounter{tocdepth}{7} 
+\setcounter{secnumdepth}{7}
+
+\author{ } %this avoids warnings
+
+\date{}
+\title{\fillTitle}
+
+\lstset{language=Python}
+
+\pagestyle{fancy}
+\setlength\itemsep{-0.3em}
+
+\fancypagestyle{intr1}{
+	\fancyhf{}
+	\renewcommand{\headrulewidth}{0pt}
+	\renewcommand{\footrulewidth}{0.2pt}
+	\fancyfoot[C]{I of III}
+	\fancyfoot[L]{\small \textit{\leftfoot}}
+}
+
+\fancypagestyle{intr2}{
+	\fancyhf{}
+	\renewcommand{\headrulewidth}{0pt}
+	\renewcommand{\footrulewidth}{0.2pt}
+	\fancyfoot[C]{II of III}
+	\fancyfoot[L]{\small \textit{\leftfoot}}
+}
+	
+\fancypagestyle{intr3}{
+	\fancyhf{}
+	\renewcommand{\headrulewidth}{0pt}
+	\renewcommand{\footrulewidth}{0.2pt}
+	\fancyfoot[C]{III di III}
+	\fancyfoot[L]{\small \textit{\leftfoot}}
+}
+
+\titleformat{\paragraph}
+{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+
+\titleformat{\subparagraph}
+{\normalfont\normalsize\bfseries}{\thesubparagraph}{1em}{}
+\titlespacing*{\subparagraph}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
